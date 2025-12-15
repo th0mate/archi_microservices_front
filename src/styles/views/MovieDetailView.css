@@ -1,0 +1,313 @@
+.movie-detail {
+  min-height: 100vh;
+
+  .movie-detail__loading,
+  .movie-detail__error {
+    padding-top: 120px;
+    padding-bottom: var(--spacing-3xl);
+  }
+
+  .movie-detail__error {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-lg);
+
+    p {
+      font-size: var(--font-size-lg);
+      color: var(--color-error);
+    }
+  }
+
+  .movie-hero {
+    position: relative;
+    min-height: 70vh;
+    display: flex;
+    align-items: flex-end;
+    padding: var(--spacing-3xl) 0;
+
+    .movie-hero__backdrop {
+      position: absolute;
+      inset: 0;
+      background-size: cover;
+      background-position: center top;
+    }
+
+    .movie-hero__overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        to top,
+        var(--color-bg-primary) 0%,
+        rgba(10, 10, 15, 0.8) 40%,
+        rgba(10, 10, 15, 0.4) 100%
+      );
+    }
+
+    .movie-hero__content {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      gap: var(--spacing-2xl);
+      align-items: flex-end;
+
+      @media (max-width: 768px) {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      .movie-hero__poster {
+        flex-shrink: 0;
+        width: 260px;
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        box-shadow: var(--shadow-xl);
+
+        @media (max-width: 768px) {
+          width: 200px;
+        }
+
+        img {
+          width: 100%;
+          height: auto;
+        }
+      }
+
+      .movie-hero__info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-md);
+
+        .movie-hero__title {
+          font-size: var(--font-size-4xl);
+          font-weight: var(--font-weight-extrabold);
+          color: var(--color-text-primary);
+          line-height: var(--line-height-tight);
+
+          @media (max-width: 640px) {
+            font-size: var(--font-size-2xl);
+          }
+        }
+
+        .movie-hero__meta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--spacing-md);
+          font-size: var(--font-size-base);
+          color: var(--color-text-secondary);
+
+          @media (max-width: 768px) {
+            justify-content: center;
+          }
+
+          .meta-rating {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: #fbbf24;
+
+            .star-icon {
+              width: 18px;
+              height: 18px;
+            }
+          }
+        }
+
+        .movie-hero__genres {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--spacing-sm);
+
+          @media (max-width: 768px) {
+            justify-content: center;
+          }
+
+          .genre-tag {
+            padding: var(--spacing-xs) var(--spacing-md);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-full);
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+          }
+        }
+
+        .movie-hero__tagline {
+          font-size: var(--font-size-lg);
+          font-style: italic;
+          color: var(--color-text-muted);
+          margin-top: var(--spacing-sm);
+        }
+
+        .movie-hero__actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--spacing-md);
+          margin-top: var(--spacing-lg);
+
+          @media (max-width: 768px) {
+            justify-content: center;
+          }
+
+          .btn-icon {
+            width: 18px;
+            height: 18px;
+          }
+        }
+      }
+    }
+  }
+
+  .movie-info {
+    background: var(--color-bg-primary);
+
+    .movie-info__grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: var(--spacing-2xl);
+
+      @media (min-width: 1024px) {
+        grid-template-columns: 1fr 350px;
+      }
+
+      .movie-info__main {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-2xl);
+
+        .movie-synopsis {
+          font-size: var(--font-size-lg);
+          color: var(--color-text-secondary);
+          line-height: var(--line-height-relaxed);
+        }
+
+        .movie-cast {
+          margin-top: var(--spacing-lg);
+
+          .subsection-title {
+            font-size: var(--font-size-xl);
+            font-weight: var(--font-weight-semibold);
+            color: var(--color-text-primary);
+            margin-bottom: var(--spacing-lg);
+          }
+
+          .cast-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: var(--spacing-md);
+
+            .cast-card {
+              display: flex;
+              flex-direction: column;
+              gap: var(--spacing-sm);
+
+              .cast-card__image {
+                aspect-ratio: 2/3;
+                border-radius: var(--radius-md);
+                overflow: hidden;
+                background: var(--color-bg-tertiary);
+
+                img {
+                  width: 100%;
+                  height: 100%;
+                  object-fit: cover;
+                }
+
+                .cast-card__placeholder {
+                  width: 100%;
+                  height: 100%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+
+                  svg {
+                    width: 40%;
+                    height: 40%;
+                    color: var(--color-text-muted);
+                  }
+                }
+              }
+
+              .cast-card__info {
+                display: flex;
+                flex-direction: column;
+
+                .cast-card__name {
+                  font-size: var(--font-size-sm);
+                  font-weight: var(--font-weight-medium);
+                  color: var(--color-text-primary);
+                }
+
+                .cast-card__character {
+                  font-size: var(--font-size-xs);
+                  color: var(--color-text-muted);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      .movie-info__sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-xl);
+
+        .info-card,
+        .booking-card {
+          padding: var(--spacing-lg);
+          background: var(--color-bg-secondary);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-lg);
+
+          .info-card__title,
+          .booking-card__title {
+            font-size: var(--font-size-lg);
+            font-weight: var(--font-weight-semibold);
+            color: var(--color-text-primary);
+            margin-bottom: var(--spacing-lg);
+          }
+        }
+
+        .info-card {
+          .info-list {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+
+            .info-item {
+              display: flex;
+              flex-direction: column;
+              gap: 2px;
+
+              dt {
+                font-size: var(--font-size-xs);
+                color: var(--color-text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+              }
+
+              dd {
+                font-size: var(--font-size-sm);
+                color: var(--color-text-primary);
+              }
+            }
+          }
+        }
+
+        .booking-card {
+          background: linear-gradient(135deg, var(--color-bg-secondary), var(--color-bg-tertiary));
+          border-color: var(--color-accent);
+
+          .booking-card__text {
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+            margin-bottom: var(--spacing-lg);
+          }
+        }
+      }
+    }
+  }
+}
