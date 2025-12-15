@@ -185,15 +185,14 @@ ol {
 
 .btn-primary {
     background: var(--color-accent);
+    border: 1px solid var(--color-accent-hover);
     color: #ffffff;
-    border: none;
 }
 
 .btn-primary:hover {
-    background: var(--color-accent-hover);
-    color: #ffffff;
+    background: transparent;
+    color: var(--color-accent-hover);
     box-shadow: var(--shadow-glow);
-    transform: translateY(-2px);
 }
 
 .btn-secondary {
@@ -203,7 +202,7 @@ ol {
 }
 
 .btn-secondary:hover {
-    border-color: var(--color-text-primary);
+    border-color: var(--color-accent-hover);
     background: rgba(255, 255, 255, 0.05);
 }
 
