@@ -68,17 +68,17 @@ async function fetchApi<T>(endpoint: string, params: Record<string, string> = {}
   const url = new URL(`${BASE_URL}${endpoint}`)
   url.searchParams.set('api_key', API_KEY)
   url.searchParams.set('language', 'fr-FR')
-  
+
   Object.entries(params).forEach(([key, value]) => {
     url.searchParams.set(key, value)
   })
-  
+
   const response = await fetch(url.toString())
-  
+
   if (!response.ok) {
     throw new Error(`API Error: ${response.status} ${response.statusText}`)
   }
-  
+
   return response.json()
 }
 
@@ -107,8 +107,8 @@ export async function getMovieCredits(movieId: number): Promise<MovieCredits> {
 }
 
 export async function searchMovies(query: string, page = 1): Promise<ApiResponse<Movie>> {
-  return fetchApi<ApiResponse<Movie>>('/search/movie', { 
-    query, 
+  return fetchApi<ApiResponse<Movie>>('/search/movie', {
+    query,
     page: page.toString(),
     include_adult: 'false'
   })
@@ -126,18 +126,46 @@ export async function discoverMovies(params: {
   'primary_release_date.lte'?: string
 } = {}): Promise<ApiResponse<Movie>> {
   const queryParams: Record<string, string> = {}
-  
+
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined) {
       queryParams[key] = value.toString()
     }
   })
-  
+
   return fetchApi<ApiResponse<Movie>>('/discover/movie', queryParams)
 }
 
 export async function getSimilarMovies(movieId: number, page = 1): Promise<ApiResponse<Movie>> {
   return fetchApi<ApiResponse<Movie>>(`/movie/${movieId}/similar`, { page: page.toString() })
+}
+
+export interface MovieVideo {
+  id: string
+  key: string
+  name: string
+  site: string
+  size: number
+  type: string
+  official: boolean
+  published_at: string
+}
+
+export interface MovieVideosResponse {
+  id: number
+  results: MovieVideo[]
+}
+
+export async function getMovieVideos(movieId: number): Promise<MovieVideosResponse> {
+  return fetchApi<MovieVideosResponse>(`/movie/${movieId}/videos`)
+}
+
+export function getYouTubeTrailer(videos: MovieVideo[]): MovieVideo | null {
+  const trailer = videos.find(v => v.site === 'YouTube' && v.type === 'Trailer' && v.official)
+    || videos.find(v => v.site === 'YouTube' && v.type === 'Trailer')
+    || videos.find(v => v.site === 'YouTube' && v.type === 'Teaser')
+    || videos.find(v => v.site === 'YouTube')
+  return trailer || null
 }
 
 export default {
@@ -151,5 +179,7 @@ export default {
   getGenres,
   discoverMovies,
   getSimilarMovies,
+  getMovieVideos,
+  getYouTubeTrailer,
   getImageUrl
 }

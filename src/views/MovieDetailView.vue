@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
-import { getMovieDetails, getMovieCredits, getImageUrl, type MovieDetails, type Cast } from '@/services/tmdb'
+import { getMovieDetails, getMovieCredits, getMovieVideos, getYouTubeTrailer, getImageUrl, type MovieDetails, type Cast, type MovieVideo } from '@/services/tmdb'
 import { useAuthStore } from '@/stores/auth'
+import TrailerModal from '@/components/TrailerModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -10,8 +11,10 @@ const { state: authState } = useAuthStore()
 
 const movie = ref<MovieDetails | null>(null)
 const cast = ref<Cast[]>([])
+const trailer = ref<MovieVideo | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
+const isTrailerOpen = ref(false)
 
 const backdropUrl = computed(() => getImageUrl(movie.value?.backdrop_path, 'original'))
 const posterUrl = computed(() => getImageUrl(movie.value?.poster_path, 'w500'))
@@ -37,13 +40,15 @@ async function loadMovie() {
     isLoading.value = true
     error.value = null
     
-    const [movieData, creditsData] = await Promise.all([
+    const [movieData, creditsData, videosData] = await Promise.all([
       getMovieDetails(movieId),
-      getMovieCredits(movieId)
+      getMovieCredits(movieId),
+      getMovieVideos(movieId)
     ])
     
     movie.value = movieData
     cast.value = creditsData.cast.slice(0, 8)
+    trailer.value = getYouTubeTrailer(videosData.results)
   } catch (e) {
     error.value = 'Impossible de charger les informations du film.'
     console.error('Error loading movie:', e)
@@ -58,6 +63,16 @@ function handleBooking() {
   } else {
     router.push(`/reservation/${movie.value?.id}`)
   }
+}
+
+function openTrailer() {
+  if (trailer.value) {
+    isTrailerOpen.value = true
+  }
+}
+
+function closeTrailer() {
+  isTrailerOpen.value = false
 }
 
 onMounted(loadMovie)
@@ -130,12 +145,22 @@ onMounted(loadMovie)
                 </svg>
                 Réserver des places
               </button>
-              <button class="btn btn-secondary btn-lg">
+              <button 
+                v-if="trailer" 
+                class="btn btn-secondary btn-lg" 
+                @click="openTrailer"
+              >
                 <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>
                 Bande-annonce
               </button>
+              <span v-else class="btn btn-secondary btn-lg btn--disabled" style="opacity: 0.5; cursor: not-allowed;">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                Bande-annonce indisponible
+              </span>
             </div>
           </div>
         </div>
@@ -223,6 +248,13 @@ onMounted(loadMovie)
         </div>
       </section>
     </template>
+    
+    <TrailerModal
+      :is-open="isTrailerOpen"
+      :video-key="trailer?.key || ''"
+      :title="movie?.title ? `${movie.title} - Bande-annonce` : 'Bande-annonce'"
+      @close="closeTrailer"
+    />
   </main>
 </template>
 

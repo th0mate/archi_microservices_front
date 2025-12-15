@@ -177,6 +177,12 @@ ol {
     cursor: pointer;
 }
 
+.btn-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
 .btn-primary {
     background: var(--color-accent);
     color: #ffffff;
