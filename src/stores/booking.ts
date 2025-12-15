@@ -1,171 +1,229 @@
 import { reactive, readonly, computed } from 'vue'
-import type { MovieDetails } from '@/services/tmdb'
-
-export interface Showtime {
-    id: string
-    time: string
-    date: string
-    hall: string
-    format: '2D' | '3D' | 'IMAX'
-    price: number
-}
-
-export interface Seat {
-    row: string
-    number: number
-    isAvailable: boolean
-    isSelected: boolean
-    price: number
-}
+import * as screeningApi from '@/services/screeningApi'
+import type { Movie, Screening, ApiError } from '@/types'
 
 export interface BookingState {
-    movie: MovieDetails | null
-    selectedShowtime: Showtime | null
-    selectedSeats: Seat[]
-    step: 'showtime' | 'seats' | 'confirmation'
+    movie: Movie | null
+    screenings: Screening[]
+    selectedScreening: Screening | null
+    isLoading: boolean
+    error: string | null
+    bookingSuccess: boolean
 }
 
 const state = reactive<BookingState>({
     movie: null,
-    selectedShowtime: null,
-    selectedSeats: [],
-    step: 'showtime'
+    screenings: [],
+    selectedScreening: null,
+    isLoading: false,
+    error: null,
+    bookingSuccess: false
 })
 
-function generateShowtimes(): Showtime[] {
-    const times = ['14:00', '16:30', '19:00', '21:30']
-    const formats: ('2D' | '3D' | 'IMAX')[] = ['2D', '2D', '3D', 'IMAX']
-    const halls = ['Salle 1', 'Salle 2', 'Salle 3', 'Salle IMAX']
-    const showtimes: Showtime[] = []
-
-    for (let d = 0; d < 5; d++) {
-        const date = new Date()
-        date.setDate(date.getDate() + d)
-        const dateStr = date.toISOString().split('T')[0]
-
-        times.forEach((time, i) => {
-            showtimes.push({
-                id: `${dateStr}-${time}-${i}`,
-                time,
-                date: dateStr,
-                hall: halls[i % halls.length],
-                format: formats[i % formats.length],
-                price: formats[i % formats.length] === 'IMAX' ? 16 : formats[i % formats.length] === '3D' ? 14 : 11
-            })
-        })
-    }
-
-    return showtimes
-}
-
-function generateSeats(): Seat[][] {
-    const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
-    const seatsPerRow = 12
-    const grid: Seat[][] = []
-
-    rows.forEach(row => {
-        const rowSeats: Seat[] = []
-        for (let i = 1; i <= seatsPerRow; i++) {
-            // Random availability (80% available)
-            const isAvailable = Math.random() > 0.2
-            rowSeats.push({
-                row,
-                number: i,
-                isAvailable,
-                isSelected: false,
-                price: state.selectedShowtime?.price || 11
-            })
-        }
-        grid.push(rowSeats)
-    })
-
-    return grid
-}
-
-const total = computed(() => {
-    return state.selectedSeats.reduce((sum, seat) => sum + seat.price, 0)
+/**
+ * Nombre de places disponibles pour la séance sélectionnée
+ */
+const availableSeats = computed(() => {
+    return state.selectedScreening?.availableSeats || 0
 })
 
-function setMovie(movie: MovieDetails) {
+/**
+ * Prix de la séance sélectionnée
+ */
+const price = computed(() => {
+    return state.selectedScreening?.price || 0
+})
+
+/**
+ * Définit le film pour la réservation et charge ses séances
+ */
+async function setMovie(movie: Movie): Promise<void> {
     state.movie = movie
-    state.selectedShowtime = null
-    state.selectedSeats = []
-    state.step = 'showtime'
+    state.selectedScreening = null
+    state.error = null
+    state.bookingSuccess = false
+
+    await loadScreenings(movie.id)
 }
 
-function selectShowtime(showtime: Showtime) {
-    state.selectedShowtime = showtime
-    state.selectedSeats = []
-    state.step = 'seats'
-}
+/**
+ * Charge les séances disponibles pour un film
+ */
+async function loadScreenings(movieId: number): Promise<void> {
+    state.isLoading = true
+    state.error = null
 
-function toggleSeat(seat: Seat) {
-    if (!seat.isAvailable) return
-
-    const index = state.selectedSeats.findIndex(
-        s => s.row === seat.row && s.number === seat.number
-    )
-
-    if (index > -1) {
-        state.selectedSeats.splice(index, 1)
-        seat.isSelected = false
-    } else {
-        state.selectedSeats.push(seat)
-        seat.isSelected = true
+    try {
+        const screenings = await screeningApi.getScreeningsByMovie(movieId)
+        state.screenings = screenings
+    } catch (e) {
+        const error = e as ApiError
+        state.error = error.message || 'Impossible de charger les séances'
+        state.screenings = []
+    } finally {
+        state.isLoading = false
     }
 }
 
-function goToConfirmation() {
-    if (state.selectedSeats.length > 0) {
-        state.step = 'confirmation'
+/**
+ * Sélectionne une séance
+ */
+function selectScreening(screening: Screening): void {
+    state.selectedScreening = screening
+    state.error = null
+}
+
+/**
+ * Rejoindre une séance (effectuer une réservation)
+ */
+async function joinScreening(userId: number): Promise<boolean> {
+    if (!state.selectedScreening) {
+        state.error = 'Veuillez sélectionner une séance'
+        return false
+    }
+
+    // Vérifier si l'utilisateur a déjà rejoint cette séance
+    if (screeningApi.hasUserJoined(state.selectedScreening, userId)) {
+        state.error = 'Vous avez déjà réservé cette séance'
+        return false
+    }
+
+    // Vérifier s'il reste des places
+    if (screeningApi.isScreeningFull(state.selectedScreening)) {
+        state.error = 'Cette séance est complète'
+        return false
+    }
+
+    state.isLoading = true
+    state.error = null
+
+    try {
+        const updatedScreening = await screeningApi.joinScreening(state.selectedScreening.id)
+
+        // Mettre à jour la séance dans la liste
+        const index = state.screenings.findIndex(s => s.id === updatedScreening.id)
+        if (index !== -1) {
+            state.screenings[index] = updatedScreening
+        }
+        state.selectedScreening = updatedScreening
+        state.bookingSuccess = true
+
+        return true
+    } catch (e) {
+        const error = e as ApiError
+        state.error = error.message || 'Impossible de rejoindre cette séance'
+        return false
+    } finally {
+        state.isLoading = false
     }
 }
 
-function goBack() {
-    if (state.step === 'confirmation') {
-        state.step = 'seats'
-    } else if (state.step === 'seats') {
-        state.step = 'showtime'
+/**
+ * Quitter une séance (annuler une réservation)
+ */
+async function leaveScreening(): Promise<boolean> {
+    if (!state.selectedScreening) {
+        state.error = 'Aucune séance sélectionnée'
+        return false
+    }
+
+    state.isLoading = true
+    state.error = null
+
+    try {
+        const updatedScreening = await screeningApi.leaveScreening(state.selectedScreening.id)
+
+        // Mettre à jour la séance dans la liste
+        const index = state.screenings.findIndex(s => s.id === updatedScreening.id)
+        if (index !== -1) {
+            state.screenings[index] = updatedScreening
+        }
+        state.selectedScreening = updatedScreening
+
+        return true
+    } catch (e) {
+        const error = e as ApiError
+        state.error = error.message || 'Impossible d\'annuler cette réservation'
+        return false
+    } finally {
+        state.isLoading = false
     }
 }
 
-function reset() {
+/**
+ * Récupère les réservations d'un utilisateur
+ */
+async function getUserBookings(userId: number) {
+    state.isLoading = true
+    state.error = null
+
+    try {
+        return await screeningApi.getUserBookings(userId)
+    } catch (e) {
+        const error = e as ApiError
+        state.error = error.message || 'Impossible de charger vos réservations'
+        return []
+    } finally {
+        state.isLoading = false
+    }
+}
+
+/**
+ * Réinitialise l'état de réservation
+ */
+function reset(): void {
     state.movie = null
-    state.selectedShowtime = null
-    state.selectedSeats = []
-    state.step = 'showtime'
+    state.screenings = []
+    state.selectedScreening = null
+    state.error = null
+    state.bookingSuccess = false
 }
 
-function confirmBooking(): string {
-    const reference = `CLX-${Date.now().toString(36).toUpperCase()}`
-
-    const bookings = JSON.parse(localStorage.getItem('cinelux_bookings') || '[]')
-    bookings.push({
-        reference,
-        movieId: state.movie?.id,
-        movieTitle: state.movie?.title,
-        showtime: state.selectedShowtime,
-        seats: state.selectedSeats.map(s => `${s.row}${s.number}`),
-        total: total.value,
-        createdAt: new Date().toISOString()
-    })
-    localStorage.setItem('cinelux_bookings', JSON.stringify(bookings))
-
-    return reference
+/**
+ * Efface les erreurs
+ */
+function clearError(): void {
+    state.error = null
 }
+
+/**
+ * Formate la date et l'heure d'une séance
+ */
+function formatScreeningDateTime(screening: Screening): string {
+    return screeningApi.formatScreeningDateTime(screening)
+}
+
+/**
+ * Vérifie si une séance est complète
+ */
+function isScreeningFull(screening: Screening): boolean {
+    return screeningApi.isScreeningFull(screening)
+}
+
+/**
+ * Vérifie si un utilisateur a rejoint une séance
+ */
+function hasUserJoined(screening: Screening, userId: number): boolean {
+    return screeningApi.hasUserJoined(screening, userId)
+}
+
+export { Screening }
 
 export const useBookingStore = () => ({
     state: readonly(state),
-    total,
-    generateShowtimes,
-    generateSeats,
+    availableSeats,
+    price,
     setMovie,
-    selectShowtime,
-    toggleSeat,
-    goToConfirmation,
-    goBack,
+    loadScreenings,
+    selectScreening,
+    joinScreening,
+    leaveScreening,
+    getUserBookings,
     reset,
-    confirmBooking
+    clearError,
+    formatScreeningDateTime,
+    isScreeningFull,
+    hasUserJoined
 })
 
 export default useBookingStore

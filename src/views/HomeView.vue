@@ -2,7 +2,8 @@
 import { ref, onMounted } from 'vue'
 import HeroSlider from '@/components/HeroSlider.vue'
 import MovieCard from '@/components/MovieCard.vue'
-import { getNowPlaying, getUpcoming, type Movie } from '@/services/tmdb'
+import { getNowPlaying, getUpcoming } from '@/services/movieApi'
+import type { Movie } from '@/types'
 
 const featuredMovies = ref<Movie[]>([])
 const nowPlaying = ref<Movie[]>([])
@@ -20,10 +21,10 @@ async function loadMovies() {
       getUpcoming()
     ])
 
-    nowPlaying.value = nowPlayingRes.results.slice(0, 8)
-    upcoming.value = upcomingRes.results.slice(0, 8)
+    nowPlaying.value = nowPlayingRes.movies.slice(0, 8)
+    upcoming.value = upcomingRes.movies.slice(0, 8)
     
-    featuredMovies.value = nowPlayingRes.results.slice(0, 5)
+    featuredMovies.value = nowPlayingRes.movies.slice(0, 5)
   } catch (e) {
     error.value = 'Impossible de charger les films. Veuillez réessayer.'
     console.error('Error loading movies:', e)

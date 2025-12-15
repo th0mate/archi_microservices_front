@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { getImageUrl, type Movie } from '@/services/tmdb'
+import { getImageUrl } from '@/services/movieApi'
+import type { Movie } from '@/types'
 
 const props = defineProps<{
   movie: Movie
   showTimes?: boolean
 }>()
 
-const posterUrl = computed(() => getImageUrl(props.movie.poster_path, 'w500'))
-const rating = computed(() => props.movie.vote_average.toFixed(1))
-const year = computed(() => new Date(props.movie.release_date).getFullYear())
+const posterUrl = computed(() => getImageUrl(props.movie.posterUrl, '/placeholder-movie.jpg'))
+const rating = computed(() => props.movie.voteAverage.toFixed(1))
+const year = computed(() => new Date(props.movie.releaseDate).getFullYear())
 
 const showtimes = ['14:00', '17:00', '19:30', '21:45']
 </script>

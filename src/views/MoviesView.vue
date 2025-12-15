@@ -3,7 +3,8 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MovieCard from '@/components/MovieCard.vue'
 import SearchBar from '@/components/SearchBar.vue'
-import { getNowPlaying, getUpcoming, searchMovies, getGenres, discoverMovies, type Movie, type Genre } from '@/services/tmdb'
+import { getNowPlaying, getUpcoming, searchMovies, getGenres, getMoviesByGenre } from '@/services/movieApi'
+import type { Movie, Genre } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,7 +22,6 @@ const selectedFilter = ref<string>('now_playing')
 const filters = [
   { value: 'now_playing', label: 'À l\'affiche' },
   { value: 'upcoming', label: 'Prochainement' },
-  { value: 'popular', label: 'Populaires' }
 ]
 
 const pageTitle = computed(() => {
@@ -51,10 +51,7 @@ async function loadMovies() {
     if (searchQuery.value) {
       response = await searchMovies(searchQuery.value, currentPage.value)
     } else if (selectedGenre.value) {
-      response = await discoverMovies({
-        page: currentPage.value,
-        with_genres: selectedGenre.value
-      })
+      response = await getMoviesByGenre(Number(selectedGenre.value), currentPage.value)
     } else {
       switch (selectedFilter.value) {
         case 'upcoming':
@@ -66,8 +63,8 @@ async function loadMovies() {
       }
     }
 
-    movies.value = response.results
-    totalPages.value = Math.min(response.total_pages, 20)
+    movies.value = response.movies
+    totalPages.value = Math.min(response.totalPages, 20)
   } catch (e) {
     error.value = 'Impossible de charger les films. Veuillez réessayer.'
     console.error('Error loading movies:', e)

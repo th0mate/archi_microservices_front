@@ -1,54 +1,60 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
-import { getMovieDetails, getImageUrl, type MovieDetails } from '@/services/tmdb'
+import { getMovieDetails, getImageUrl } from '@/services/movieApi'
+import { getScreeningsByMovie, joinScreening, formatScreeningDateTime, isScreeningFull, hasUserJoined } from '@/services/screeningApi'
 import { useAuthStore } from '@/stores/auth'
-import SeatSelector from '@/components/SeatSelector.vue'
-import type { Seat } from '@/stores/booking'
+import type { Movie, Screening } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const { state: authState } = useAuthStore()
 
-const movie = ref<MovieDetails | null>(null)
+const movie = ref<Movie | null>(null)
+const screenings = ref<Screening[]>([])
 const isLoading = ref(true)
+const isJoining = ref(false)
 const error = ref<string | null>(null)
 
-const step = ref<'showtime' | 'seats' | 'confirmation'>('showtime')
+const step = ref<'screenings' | 'confirmation'>('screenings')
 const selectedDate = ref<string>('')
-const selectedShowtime = ref<{ time: string; format: string; price: number } | null>(null)
-const selectedSeats = ref<Seat[]>([])
-const bookingReference = ref<string>('')
+const selectedScreening = ref<Screening | null>(null)
+const bookingSuccess = ref(false)
 
-const posterUrl = computed(() => getImageUrl(movie.value?.poster_path, 'w342'))
+const posterUrl = computed(() => getImageUrl(movie.value?.posterUrl, '/placeholder-movie.jpg'))
 
+// Regroupe les séances par date
+const screeningsByDate = computed(() => {
+  const grouped: Record<string, Screening[]> = {}
+  screenings.value.forEach(screening => {
+    if (!grouped[screening.date]) {
+      grouped[screening.date] = []
+    }
+    grouped[screening.date].push(screening)
+  })
+  return grouped
+})
+
+// Dates disponibles
 const dates = computed(() => {
-  const result = []
-  for (let i = 0; i < 5; i++) {
-    const date = new Date()
-    date.setDate(date.getDate() + i)
-    result.push({
-      value: date.toISOString().split('T')[0],
+  return Object.keys(screeningsByDate.value).sort().map(dateStr => {
+    const date = new Date(dateStr)
+    return {
+      value: dateStr,
       day: date.toLocaleDateString('fr-FR', { weekday: 'short' }),
       date: date.getDate(),
       month: date.toLocaleDateString('fr-FR', { month: 'short' })
-    })
-  }
-  return result
+    }
+  })
 })
 
-const showtimes = computed(() => [
-  { time: '14:00', format: '2D', price: 11 },
-  { time: '16:30', format: '2D', price: 11 },
-  { time: '19:00', format: '3D', price: 14 },
-  { time: '21:30', format: 'IMAX', price: 16 }
-])
-
-const total = computed(() => {
-  return selectedSeats.value.reduce((sum, seat) => sum + seat.price, 0)
+// Séances pour la date sélectionnée
+const screeningsForSelectedDate = computed(() => {
+  if (!selectedDate.value) return []
+  return screeningsByDate.value[selectedDate.value] || []
 })
 
-async function loadMovie() {
+async function loadData() {
   const movieId = Number(route.params.id)
   
   if (!authState.isAuthenticated) {
@@ -65,59 +71,78 @@ async function loadMovie() {
   try {
     isLoading.value = true
     error.value = null
-    movie.value = await getMovieDetails(movieId)
-    selectedDate.value = dates.value[0].value
+    
+    // Charger le film et les séances en parallèle
+    const [movieData, screeningsData] = await Promise.all([
+      getMovieDetails(movieId),
+      getScreeningsByMovie(movieId)
+    ])
+    
+    movie.value = movieData
+    screenings.value = screeningsData
+    
+    // Sélectionner la première date disponible
+    if (dates.value.length > 0) {
+      selectedDate.value = dates.value[0].value
+    }
   } catch (e) {
-    error.value = 'Impossible de charger les informations du film.'
-    console.error('Error loading movie:', e)
+    error.value = 'Impossible de charger les informations.'
+    console.error('Error loading data:', e)
   } finally {
     isLoading.value = false
   }
 }
 
-function selectShowtime(showtime: typeof showtimes.value[0]) {
-  selectedShowtime.value = showtime
-  step.value = 'seats'
-}
-
-function handleSeatsUpdate(seats: Seat[]) {
-  selectedSeats.value = seats
-}
-
-function goToConfirmation() {
-  if (selectedSeats.value.length > 0) {
-    step.value = 'confirmation'
+function selectScreening(screening: Screening) {
+  if (isScreeningFull(screening)) {
+    error.value = 'Cette séance est complète'
+    return
   }
+  
+  selectedScreening.value = screening
+  step.value = 'confirmation'
+  error.value = null
 }
 
 function goBack() {
-  if (step.value === 'confirmation') {
-    step.value = 'seats'
-  } else if (step.value === 'seats') {
-    step.value = 'showtime'
-    selectedShowtime.value = null
-    selectedSeats.value = []
+  step.value = 'screenings'
+  selectedScreening.value = null
+  error.value = null
+}
+
+async function confirmBooking() {
+  if (!selectedScreening.value || !authState.user) {
+    error.value = 'Veuillez sélectionner une séance'
+    return
+  }
+
+  // Vérifier si l'utilisateur a déjà rejoint
+  if (hasUserJoined(selectedScreening.value, authState.user.id)) {
+    error.value = 'Vous avez déjà réservé cette séance'
+    return
+  }
+
+  isJoining.value = true
+  error.value = null
+
+  try {
+    const updatedScreening = await joinScreening(selectedScreening.value.id)
+    
+    // Mettre à jour la séance dans la liste
+    const index = screenings.value.findIndex(s => s.id === updatedScreening.id)
+    if (index !== -1) {
+      screenings.value[index] = updatedScreening
+    }
+    selectedScreening.value = updatedScreening
+    bookingSuccess.value = true
+  } catch (e: any) {
+    error.value = e.message || 'Impossible de confirmer la réservation'
+  } finally {
+    isJoining.value = false
   }
 }
 
-function confirmBooking() {
-  bookingReference.value = `CLX-${Date.now().toString(36).toUpperCase()}`
-  
-  const bookings = JSON.parse(localStorage.getItem('cinelux_bookings') || '[]')
-  bookings.push({
-    reference: bookingReference.value,
-    movieId: movie.value?.id,
-    movieTitle: movie.value?.title,
-    date: selectedDate.value,
-    showtime: selectedShowtime.value,
-    seats: selectedSeats.value.map(s => `${s.row}${s.number}`),
-    total: total.value,
-    createdAt: new Date().toISOString()
-  })
-  localStorage.setItem('cinelux_bookings', JSON.stringify(bookings))
-}
-
-onMounted(loadMovie)
+onMounted(loadData)
 </script>
 
 <template>
@@ -127,7 +152,7 @@ onMounted(loadMovie)
         <div class="skeleton" style="height: 400px; border-radius: var(--radius-xl);"></div>
       </div>
 
-      <div v-else-if="error" class="booking-error">
+      <div v-else-if="error && !movie" class="booking-error">
         <p>{{ error }}</p>
         <RouterLink to="/films" class="btn btn-primary">
           Retour aux films
@@ -138,25 +163,17 @@ onMounted(loadMovie)
         <div class="booking-progress">
           <div 
             class="progress-step" 
-            :class="{ 'is-active': step === 'showtime', 'is-completed': step !== 'showtime' }"
+            :class="{ 'is-active': step === 'screenings', 'is-completed': step === 'confirmation' }"
           >
             <span class="progress-number">1</span>
             <span class="progress-label">Séance</span>
-          </div>
-          <div class="progress-line" :class="{ 'is-active': step !== 'showtime' }"></div>
-          <div 
-            class="progress-step" 
-            :class="{ 'is-active': step === 'seats', 'is-completed': step === 'confirmation' }"
-          >
-            <span class="progress-number">2</span>
-            <span class="progress-label">Places</span>
           </div>
           <div class="progress-line" :class="{ 'is-active': step === 'confirmation' }"></div>
           <div 
             class="progress-step" 
             :class="{ 'is-active': step === 'confirmation' }"
           >
-            <span class="progress-number">3</span>
+            <span class="progress-number">2</span>
             <span class="progress-label">Confirmation</span>
           </div>
         </div>
@@ -174,129 +191,103 @@ onMounted(loadMovie)
           </aside>
 
           <div class="booking-content">
-            <section v-if="step === 'showtime'" class="booking-step">
+            <!-- Étape 1: Sélection de séance -->
+            <section v-if="step === 'screenings'" class="booking-step">
               <h2 class="step-title">Choisissez votre séance</h2>
 
-              <div class="date-selector">
-                <h3 class="selector-label">Date</h3>
-                <div class="date-options">
-                  <button
-                    v-for="date in dates"
-                    :key="date.value"
-                    class="date-option"
-                    :class="{ 'is-selected': selectedDate === date.value }"
-                    @click="selectedDate = date.value"
-                  >
-                    <span class="date-day">{{ date.day }}</span>
-                    <span class="date-number">{{ date.date }}</span>
-                    <span class="date-month">{{ date.month }}</span>
-                  </button>
-                </div>
+              <div v-if="dates.length === 0" class="no-screenings">
+                <p>Aucune séance disponible pour ce film.</p>
+                <RouterLink to="/films" class="btn btn-secondary">
+                  Voir d'autres films
+                </RouterLink>
               </div>
 
-              <div class="time-selector">
-                <h3 class="selector-label">Horaire</h3>
-                <div class="time-options">
-                  <button
-                    v-for="showtime in showtimes"
-                    :key="showtime.time"
-                    class="time-option"
-                    @click="selectShowtime(showtime)"
-                  >
-                    <span class="time-value">{{ showtime.time }}</span>
-                    <span class="time-format">{{ showtime.format }}</span>
-                    <span class="time-price">{{ showtime.price }}€</span>
-                  </button>
+              <template v-else>
+                <div class="date-selector">
+                  <h3 class="selector-label">Date</h3>
+                  <div class="date-options">
+                    <button
+                      v-for="date in dates"
+                      :key="date.value"
+                      class="date-option"
+                      :class="{ 'is-selected': selectedDate === date.value }"
+                      @click="selectedDate = date.value"
+                    >
+                      <span class="date-day">{{ date.day }}</span>
+                      <span class="date-number">{{ date.date }}</span>
+                      <span class="date-month">{{ date.month }}</span>
+                    </button>
+                  </div>
                 </div>
+
+                <div class="time-selector">
+                  <h3 class="selector-label">Horaire</h3>
+                  <div class="time-options">
+                    <button
+                      v-for="screening in screeningsForSelectedDate"
+                      :key="screening.id"
+                      class="time-option"
+                      :class="{ 'is-full': isScreeningFull(screening) }"
+                      :disabled="isScreeningFull(screening)"
+                      @click="selectScreening(screening)"
+                    >
+                      <span class="time-value">{{ screening.time }}</span>
+                      <span class="time-hall">{{ screening.hall }}</span>
+                      <span class="time-price">{{ screening.price }}€</span>
+                      <span class="time-seats">{{ screening.availableSeats }} places</span>
+                    </button>
+                  </div>
+                </div>
+              </template>
+
+              <div v-if="error" class="booking-error-message">
+                <p>{{ error }}</p>
               </div>
             </section>
 
-            <section v-else-if="step === 'seats'" class="booking-step">
-              <div class="step-header">
-                <button class="back-btn" @click="goBack">← Retour</button>
-                <h2 class="step-title">Choisissez vos places</h2>
-              </div>
-              
-              <div class="showtime-summary">
-                <span class="summary-item">
-                  <svg class="summary-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                    <line x1="16" y1="2" x2="16" y2="6"/>
-                    <line x1="8" y1="2" x2="8" y2="6"/>
-                    <line x1="3" y1="10" x2="21" y2="10"/>
-                  </svg>
-                  {{ new Date(selectedDate).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) }}
-                </span>
-                <span class="summary-item">
-                  <svg class="summary-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <polyline points="12 6 12 12 16 14"/>
-                  </svg>
-                  {{ selectedShowtime?.time }}
-                </span>
-                <span class="summary-item">
-                  <svg class="summary-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
-                    <line x1="7" y1="2" x2="7" y2="22"/>
-                    <line x1="17" y1="2" x2="17" y2="22"/>
-                    <line x1="2" y1="12" x2="22" y2="12"/>
-                  </svg>
-                  {{ selectedShowtime?.format }}
-                </span>
-              </div>
-
-              <SeatSelector 
-                :price="selectedShowtime?.price || 11" 
-                @update:selected="handleSeatsUpdate"
-              />
-
-              <button 
-                class="btn btn-primary btn-lg continue-btn"
-                :disabled="selectedSeats.length === 0"
-                @click="goToConfirmation"
-              >
-                Continuer ({{ selectedSeats.length }} place{{ selectedSeats.length > 1 ? 's' : '' }})
-              </button>
-            </section>
-
+            <!-- Étape 2: Confirmation -->
             <section v-else-if="step === 'confirmation'" class="booking-step">
-              <template v-if="!bookingReference">
+              <template v-if="!bookingSuccess">
                 <div class="step-header">
                   <button class="back-btn" @click="goBack">← Retour</button>
                   <h2 class="step-title">Confirmer votre réservation</h2>
                 </div>
 
-                <div class="confirmation-summary">
+                <div class="confirmation-summary" v-if="selectedScreening">
                   <div class="summary-row">
                     <span class="summary-label">Film</span>
                     <span class="summary-value">{{ movie.title }}</span>
                   </div>
                   <div class="summary-row">
                     <span class="summary-label">Date</span>
-                    <span class="summary-value">{{ new Date(selectedDate).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) }}</span>
+                    <span class="summary-value">{{ new Date(selectedScreening.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) }}</span>
                   </div>
                   <div class="summary-row">
                     <span class="summary-label">Séance</span>
-                    <span class="summary-value">{{ selectedShowtime?.time }} - {{ selectedShowtime?.format }}</span>
-                  </div>
-                  <div class="summary-row">
-                    <span class="summary-label">Places</span>
-                    <span class="summary-value">{{ selectedSeats.map(s => `${s.row}${s.number}`).join(', ') }}</span>
+                    <span class="summary-value">{{ selectedScreening.time }} - {{ selectedScreening.hall }}</span>
                   </div>
                   <div class="summary-row summary-total">
-                    <span class="summary-label">Total</span>
-                    <span class="summary-value">{{ total.toFixed(2) }} €</span>
+                    <span class="summary-label">Prix</span>
+                    <span class="summary-value">{{ selectedScreening.price.toFixed(2) }} €</span>
                   </div>
                 </div>
 
-                <button class="btn btn-primary btn-lg confirm-btn" @click="confirmBooking">
+                <div v-if="error" class="booking-error-message">
+                  <p>{{ error }}</p>
+                </div>
+
+                <button 
+                  class="btn btn-primary btn-lg confirm-btn" 
+                  @click="confirmBooking"
+                  :disabled="isJoining"
+                >
                   <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/>
                     <path d="M13 5v2"/>
                     <path d="M13 17v2"/>
                     <path d="M13 11v2"/>
                   </svg>
-                  Confirmer la réservation
+                  {{ isJoining ? 'Réservation en cours...' : 'Confirmer la réservation' }}
                 </button>
               </template>
 
@@ -309,11 +300,8 @@ onMounted(loadMovie)
                     </svg>
                   </div>
                   <h2 class="success-title">Réservation confirmée !</h2>
-                  <p class="success-reference">
-                    Référence: <strong>{{ bookingReference }}</strong>
-                  </p>
-                  <p class="success-text">
-                    Vous recevrez un email de confirmation avec votre billet électronique.
+                  <p class="success-text" v-if="selectedScreening">
+                    Vous avez rejoint la séance de {{ selectedScreening.time }} le {{ new Date(selectedScreening.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) }}.
                   </p>
                   <div class="success-actions">
                     <RouterLink to="/" class="btn btn-primary">

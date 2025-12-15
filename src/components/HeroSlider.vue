@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import {ref, onMounted, onUnmounted, computed} from 'vue'
-import {RouterLink} from 'vue-router'
-import {getImageUrl, type Movie} from '@/services/tmdb'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { RouterLink } from 'vue-router'
+import { getImageUrl } from '@/services/movieApi'
+import type { Movie } from '@/types'
 
 const props = defineProps<{
   movies: Movie[]
@@ -11,8 +12,8 @@ const currentIndex = ref(0)
 let autoplayInterval: ReturnType<typeof setInterval> | null = null
 
 const currentMovie = computed(() => props.movies[currentIndex.value])
-const backdropUrl = computed(() => getImageUrl(currentMovie.value?.backdrop_path, 'original'))
-const rating = computed(() => currentMovie.value?.vote_average?.toFixed(1) || '0')
+const backdropUrl = computed(() => getImageUrl(currentMovie.value?.backdropUrl, '/placeholder-movie.jpg'))
+const rating = computed(() => currentMovie.value?.voteAverage?.toFixed(1) || '0')
 
 function nextSlide() {
   currentIndex.value = (currentIndex.value + 1) % props.movies.length
@@ -61,7 +62,7 @@ onUnmounted(() => {
             v-show="index === currentIndex"
             :key="movie.id"
             class="hero__bg-image"
-            :style="{ backgroundImage: `url(${getImageUrl(movie.backdrop_path, 'original')})` }"
+            :style="{ backgroundImage: `url(${getImageUrl(movie.backdropUrl, '/placeholder-movie.jpg')})` }"
         />
       </TransitionGroup>
       <div class="hero__overlay"></div>
@@ -80,7 +81,7 @@ onUnmounted(() => {
             </svg>
             {{ rating }}/10
           </span>
-          <span class="hero__year">{{ new Date(currentMovie.release_date).getFullYear() }}</span>
+          <span class="hero__year">{{ new Date(currentMovie.releaseDate).getFullYear() }}</span>
         </div>
 
         <div class="hero__actions">

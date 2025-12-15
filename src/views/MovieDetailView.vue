@@ -1,25 +1,22 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
-import { getMovieDetails, getMovieCredits, getMovieVideos, getYouTubeTrailer, getImageUrl, type MovieDetails, type Cast, type MovieVideo } from '@/services/tmdb'
+import { getMovieDetails, getImageUrl } from '@/services/movieApi'
 import { useAuthStore } from '@/stores/auth'
-import TrailerModal from '@/components/TrailerModal.vue'
+import type { Movie } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const { state: authState } = useAuthStore()
 
-const movie = ref<MovieDetails | null>(null)
-const cast = ref<Cast[]>([])
-const trailer = ref<MovieVideo | null>(null)
+const movie = ref<Movie | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
-const isTrailerOpen = ref(false)
 
-const backdropUrl = computed(() => getImageUrl(movie.value?.backdrop_path, 'original'))
-const posterUrl = computed(() => getImageUrl(movie.value?.poster_path, 'w500'))
-const rating = computed(() => movie.value?.vote_average?.toFixed(1) || '0')
-const year = computed(() => movie.value?.release_date ? new Date(movie.value.release_date).getFullYear() : '')
+const backdropUrl = computed(() => getImageUrl(movie.value?.backdropUrl, '/placeholder-movie.jpg'))
+const posterUrl = computed(() => getImageUrl(movie.value?.posterUrl, '/placeholder-movie.jpg'))
+const rating = computed(() => movie.value?.voteAverage?.toFixed(1) || '0')
+const year = computed(() => movie.value?.releaseDate ? new Date(movie.value.releaseDate).getFullYear() : '')
 const runtime = computed(() => {
   if (!movie.value?.runtime) return ''
   const hours = Math.floor(movie.value.runtime / 60)
@@ -40,15 +37,7 @@ async function loadMovie() {
     isLoading.value = true
     error.value = null
     
-    const [movieData, creditsData, videosData] = await Promise.all([
-      getMovieDetails(movieId),
-      getMovieCredits(movieId),
-      getMovieVideos(movieId)
-    ])
-    
-    movie.value = movieData
-    cast.value = creditsData.cast.slice(0, 8)
-    trailer.value = getYouTubeTrailer(videosData.results)
+    movie.value = await getMovieDetails(movieId)
   } catch (e) {
     error.value = 'Impossible de charger les informations du film.'
     console.error('Error loading movie:', e)
@@ -63,16 +52,6 @@ function handleBooking() {
   } else {
     router.push(`/reservation/${movie.value?.id}`)
   }
-}
-
-function openTrailer() {
-  if (trailer.value) {
-    isTrailerOpen.value = true
-  }
-}
-
-function closeTrailer() {
-  isTrailerOpen.value = false
 }
 
 onMounted(loadMovie)
@@ -131,10 +110,6 @@ onMounted(loadMovie)
               </span>
             </div>
 
-            <p v-if="movie.tagline" class="movie-hero__tagline">
-              « {{ movie.tagline }} »
-            </p>
-
             <div class="movie-hero__actions">
               <button class="btn btn-primary btn-lg" @click="handleBooking">
                 <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -145,22 +120,12 @@ onMounted(loadMovie)
                 </svg>
                 Réserver des places
               </button>
-              <button 
-                v-if="trailer" 
-                class="btn btn-secondary btn-lg" 
-                @click="openTrailer"
-              >
+              <button class="btn btn-secondary btn-lg">
                 <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>
                 Bande-annonce
               </button>
-              <span v-else class="btn btn-secondary btn-lg btn--disabled" style="opacity: 0.5; cursor: not-allowed;">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="5 3 19 12 5 21 5 3"/>
-                </svg>
-                Bande-annonce indisponible
-              </span>
             </div>
           </div>
         </div>
@@ -174,35 +139,6 @@ onMounted(loadMovie)
               <p class="movie-synopsis">
                 {{ movie.overview || 'Aucun synopsis disponible.' }}
               </p>
-
-              <div v-if="cast.length > 0" class="movie-cast">
-                <h3 class="subsection-title">Distribution</h3>
-                <div class="cast-grid">
-                  <div
-                    v-for="actor in cast"
-                    :key="actor.id"
-                    class="cast-card"
-                  >
-                    <div class="cast-card__image">
-                      <img
-                        v-if="actor.profile_path"
-                        :src="getImageUrl(actor.profile_path, 'w185')"
-                        :alt="actor.name"
-                      />
-                      <span v-else class="cast-card__placeholder">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                          <circle cx="12" cy="7" r="4"/>
-                        </svg>
-                      </span>
-                    </div>
-                    <div class="cast-card__info">
-                      <span class="cast-card__name">{{ actor.name }}</span>
-                      <span class="cast-card__character">{{ actor.character }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
 
             <aside class="movie-info__sidebar">
@@ -211,19 +147,15 @@ onMounted(loadMovie)
                 <dl class="info-list">
                   <div class="info-item">
                     <dt>Date de sortie</dt>
-                    <dd>{{ new Date(movie.release_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) }}</dd>
+                    <dd>{{ new Date(movie.releaseDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) }}</dd>
                   </div>
                   <div class="info-item" v-if="movie.runtime">
                     <dt>Durée</dt>
                     <dd>{{ runtime }}</dd>
                   </div>
                   <div class="info-item">
-                    <dt>Langue originale</dt>
-                    <dd>{{ movie.original_language.toUpperCase() }}</dd>
-                  </div>
-                  <div class="info-item">
                     <dt>Note moyenne</dt>
-                    <dd>{{ rating }}/10 ({{ movie.vote_count }} votes)</dd>
+                    <dd>{{ rating }}/10 ({{ movie.voteCount }} votes)</dd>
                   </div>
                 </dl>
               </div>
@@ -248,13 +180,6 @@ onMounted(loadMovie)
         </div>
       </section>
     </template>
-    
-    <TrailerModal
-      :is-open="isTrailerOpen"
-      :video-key="trailer?.key || ''"
-      :title="movie?.title ? `${movie.title} - Bande-annonce` : 'Bande-annonce'"
-      @close="closeTrailer"
-    />
   </main>
 </template>
 
