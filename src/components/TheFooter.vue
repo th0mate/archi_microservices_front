@@ -10,16 +10,17 @@ const footerLinks = {
     { name: 'Contact', path: '/contact' }
   ],
   legal: [
+    { name: 'Conditions d\'utilisation', path: '/cgu' },
     { name: 'Mentions légales', path: '/mentions-legales' },
     { name: 'Politique de confidentialité', path: '/confidentialite' },
-    { name: 'CGV', path: '/cgv' }
+    { name: 'Politique cookies', path: '/cookies' }
   ]
 }
 
 const socialLinks = [
-  { name: 'Facebook', url: '#' },
-  { name: 'Instagram', url: '#' },
-  { name: 'Twitter', url: '#' }
+  { name: 'Facebook', url: 'https://www.facebook.com/GaumontPathe' },
+  { name: 'Instagram', url: 'https://www.instagram.com/gaumontpathe/' },
+  { name: 'Twitter', url: 'https://x.com/GaumontPathe' }
 ]
 </script>
 
